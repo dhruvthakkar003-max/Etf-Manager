@@ -1,0 +1,32 @@
+{
+  "name": "ETF Tracker",
+  "short_name": "ETF Tracker",
+  "description": "ETF portfolio tracker with target allocation, reserve planning and optional AI-powered insights.",
+  "start_url": "./index.html?app=etf-tracker-ai",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EFF1EA",
+  "theme_color": "#20303F",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "id": "/etf-tracker-ai"
+}
