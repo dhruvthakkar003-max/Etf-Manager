@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="ETF Tracker" />
 <meta name="application-name" content="ETF Tracker" />
 <meta name="format-detection" content="telephone=no" />
-<link rel="manifest" href="manifest.json?v=etf11" />
+<link rel="manifest" href="manifest.json?v=etf12" />
 <link rel="icon" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
@@ -635,7 +635,7 @@ function doGet(e) {
     reserves: { regular: 0, dip: 0 },
     contributions: [],
     transactions: [],
-    meta: { lastRolloverMonth: null, lastRollover: null, pricesAt: null, pricesMarketTime: null, highSrc: {}, manualHigh: {}, alertNotified: {} },
+    meta: { lastRolloverMonth: null, lastRollover: null, pricesAt: null, pricesMarketTime: null, highSrc: {}, manualHigh: {}, marketMonthHigh: {}, alertNotified: {} },
     activeTab: "trigger"
   };
 
@@ -703,7 +703,7 @@ function doGet(e) {
     var t = await Store.get(K_TXN);
     if(t){ try{ state.transactions = JSON.parse(t) || []; }catch(e){} }
     var m = await Store.get(K_META);
-    if(m){ try{ state.meta = Object.assign({ lastRolloverMonth: null, lastRollover: null, pricesAt: null, pricesMarketTime: null, highSrc: {}, manualHigh: {}, alertNotified: {} }, JSON.parse(m)); }catch(e){} }
+    if(m){ try{ state.meta = Object.assign({ lastRolloverMonth: null, lastRollover: null, pricesAt: null, pricesMarketTime: null, highSrc: {}, manualHigh: {}, marketMonthHigh: {}, alertNotified: {} }, JSON.parse(m)); }catch(e){} }
   }
   async function saveMeta(){ await Store.set(K_META, JSON.stringify(state.meta)); }
 
@@ -785,7 +785,7 @@ function doGet(e) {
     });
     if(changed) await saveFundPriceHistory();
   }
-  /* Monthly reference high = highest of (market daily highs / prices seen this month) and the manual month-high, current calendar month only. */
+  /* Monthly reference high = max of market month-high, daily history this month, and manual entry. */
   function historyHigh(fund){
     var curMonth = monthKey(todayISO());
     var arr = state.fundPriceHistory[fund.id] || [];
@@ -793,35 +793,53 @@ function doGet(e) {
       .map(function(x){ return Number(x.price)||0; }).filter(function(x){return x>0;});
     return prices.length ? Math.max.apply(null, prices) : 0;
   }
+  function marketMonthHighOf(fund){
+    var m = state.meta.marketMonthHigh && state.meta.marketMonthHigh[fund.id];
+    return (m && m.month === monthKey(todayISO()) && Number(m.price) > 0) ? Number(m.price) : 0;
+  }
   function manualHighOf(fund){
     var m = state.meta.manualHigh && state.meta.manualHigh[fund.id];
     return (m && m.month === monthKey(todayISO()) && Number(m.price) > 0) ? Number(m.price) : 0;
   }
-  function fundHigh(fund){ return Math.max(historyHigh(fund), manualHighOf(fund)); }
+  function fundHigh(fund){ return Math.max(historyHigh(fund), marketMonthHighOf(fund), manualHighOf(fund)); }
   function highSourceInfo(fund){
     var curMonth = monthKey(todayISO());
-    var man = manualHighOf(fund), hist = historyHigh(fund);
+    var man = manualHighOf(fund), hist = historyHigh(fund), mkt = marketMonthHighOf(fund);
     var src = state.meta.highSrc && state.meta.highSrc[fund.id];
-    if(man > 0 && man >= hist) return { kind: "manual", text: "Month high: entered manually" };
-    if(src && src.month === curMonth && src.src === "market") return { kind: "market", text: "Month high: market daily highs (updated " + istParts(src.at).hour + ":" + istParts(src.at).minute + " IST)" };
+    var best = Math.max(hist, mkt);
+    if(man > 0 && man >= best) return { kind: "manual", text: "Month high: entered manually" };
+    if(src && src.month === curMonth && src.src === "market" && best > 0)
+      return { kind: "market", text: "Month high: market MTD high (updated " + istParts(src.at).hour + ":" + istParts(src.at).minute + " IST)" };
     if(hist > 0) return { kind: "observed", text: "⚠ Month high is only what this app has seen so far — the real high may be higher. Refresh prices, or tap ✎ and type the real month high." };
     return { kind: "none", text: "No month high yet — refresh prices, or type it in the Month high box." };
   }
-  /* Merge market daily highs (this month) into the saved history and mark the source as market data */
-  function mergeMonthHighs(fid, days){
+  /* Merge market daily highs (this month) + explicit MTD high into history/meta */
+  function mergeMonthHighs(fid, days, explicitHigh){
     var curMonth = monthKey(todayISO()), arr = state.fundPriceHistory[fid] || [], any = false;
+    var maxH = 0;
     (days || []).forEach(function(e){
       if(!e || !e.date || monthKey(e.date) !== curMonth || !(Number(e.price) > 0)) return;
+      var px = Number(e.price);
+      if(px > maxH) maxH = px;
       var idx = arr.findIndex(function(x){ return x && x.date === e.date; });
-      if(idx >= 0) arr[idx].price = Math.max(Number(arr[idx].price)||0, Number(e.price));
-      else arr.push({ date: e.date, price: Number(e.price) });
+      if(idx >= 0) arr[idx].price = Math.max(Number(arr[idx].price)||0, px);
+      else arr.push({ date: e.date, price: px });
       any = true;
     });
+    var ex = Number(explicitHigh) || 0;
+    if(ex > maxH) maxH = ex;
     if(any){
       arr.sort(function(a,b){ return a.date.localeCompare(b.date); });
       state.fundPriceHistory[fid] = arr;
+    }
+    if(maxH > 0){
       state.meta.highSrc = state.meta.highSrc || {};
       state.meta.highSrc[fid] = { src: "market", at: Date.now(), month: curMonth };
+      state.meta.marketMonthHigh = state.meta.marketMonthHigh || {};
+      var prev = state.meta.marketMonthHigh[fid];
+      var prevPx = (prev && prev.month === curMonth) ? Number(prev.price) || 0 : 0;
+      state.meta.marketMonthHigh[fid] = { month: curMonth, price: Math.max(prevPx, maxH) };
+      any = true;
     }
     return any;
   }
@@ -1754,20 +1772,35 @@ function doGet(e) {
     if(!(px > 0)) throw new Error("No price in response");
     return { price: px, time: meta.regularMarketTime ? meta.regularMarketTime * 1000 : Date.now() };
   }
-  /* Yahoo 1-month daily bars -> price + this month's daily highs (one request gives both) */
+  /* Start of current IST calendar month as unix seconds (for Yahoo period1) */
+  function monthStartUnix(){
+    var iso = todayISO();
+    var ym = iso.slice(0, 7) + "-01T00:00:00+05:30";
+    return Math.floor(new Date(ym).getTime() / 1000);
+  }
+  /* Yahoo daily bars from month start -> live price + every session high this month + MTD high */
   function snapshotFromJson(j){
     var res = j && j.chart && j.chart.result && j.chart.result[0];
     var meta = res && res.meta;
     var px = meta && meta.regularMarketPrice;
     if(!(px > 0)) throw new Error("No price in response");
     var ts = (res && res.timestamp) || [];
-    var hs = (res && res.indicators && res.indicators.quote && res.indicators.quote[0] && res.indicators.quote[0].high) || [];
-    var cur = monthKey(todayISO()), days = [];
+    var quote = res && res.indicators && res.indicators.quote && res.indicators.quote[0];
+    var hs = (quote && quote.high) || [];
+    var adj = (res && res.indicators && res.indicators.adjclose && res.indicators.adjclose[0] && res.indicators.adjclose[0].adjclose) || [];
+    var cur = monthKey(todayISO()), days = [], monthHigh = 0;
     for(var k = 0; k < ts.length; k++){
       var h = Number(hs[k] || 0);
+      /* Some bars omit high; fall back to that bar's close/adjclose so we still capture the day */
+      if(!(h > 0)) h = Number(quote && quote.close && quote.close[k]) || Number(adj[k]) || 0;
       if(!(h > 0)) continue;
+      /* Yahoo daily timestamps are session times; map with IST calendar day */
       var day = istDateISO(Number(ts[k]) * 1000);
-      if(monthKey(day) === cur) days.push({ date: day, price: h });
+      if(monthKey(day) !== cur) continue;
+      var existing = days.find(function(d){ return d.date === day; });
+      if(existing) existing.price = Math.max(existing.price, h);
+      else days.push({ date: day, price: h });
+      if(h > monthHigh) monthHigh = h;
     }
     var dh = Number(meta.regularMarketDayHigh || 0), tm = meta.regularMarketTime ? meta.regularMarketTime * 1000 : Date.now();
     if(dh > 0){
@@ -1775,15 +1808,30 @@ function doGet(e) {
       if(monthKey(td) === cur){
         var ex = days.find(function(d){ return d.date === td; });
         if(ex) ex.price = Math.max(ex.price, dh); else days.push({ date: td, price: dh });
+        if(dh > monthHigh) monthHigh = dh;
       }
     }
-    return { price: px, time: tm, days: days };
+    /* Live last price can never be above the true session high, but keep MTD max consistent */
+    if(px > monthHigh) monthHigh = px;
+    return { price: px, time: tm, days: days, monthHigh: monthHigh };
+  }
+  function yahooChartPath(sym, snap){
+    if(!snap) return "/v8/finance/chart/" + encodeURIComponent(sym) + "?interval=1d&range=5d&includePrePost=false&_=" + Date.now();
+    /* From 1st of current IST month through now — full month-to-date highs, not only "last 30 days" */
+    var p1 = monthStartUnix();
+    var p2 = Math.floor(Date.now() / 1000) + 3600;
+    return "/v8/finance/chart/" + encodeURIComponent(sym) + "?interval=1d&period1=" + p1 + "&period2=" + p2 + "&includePrePost=false&events=div%7Csplit&_=" + Date.now();
   }
   async function nativeSnapshot(sym){
-    var path = "/v8/finance/chart/" + encodeURIComponent(sym) + "?interval=1d&range=1mo";
+    var path = yahooChartPath(sym, true);
     var hosts = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"], last = null;
     for(var i = 0; i < hosts.length; i++){
       try{ return snapshotFromJson(JSON.parse(await nativeFetch(hosts[i] + path))); }catch(e){ last = e; }
+    }
+    /* Fallback: range=1mo if period1/period2 rejected */
+    path = "/v8/finance/chart/" + encodeURIComponent(sym) + "?interval=1d&range=1mo&includePrePost=false";
+    for(var j = 0; j < hosts.length; j++){
+      try{ return snapshotFromJson(JSON.parse(await nativeFetch(hosts[j] + path))); }catch(e){ last = e; }
     }
     throw last || new Error("history unavailable");
   }
@@ -1793,23 +1841,34 @@ function doGet(e) {
     if(e instanceof TypeError) return "blocked";
     return e.message || "error";
   }
-  /* Yahoo Finance first (accurate NSE ETF prices + daily highs). Race multiple hosts/proxies; first good JSON wins. */
+  /* Yahoo Finance first (NSE ETF prices + month-to-date highs). Race hosts/proxies; prefer answers with MTD history. */
   function raceQuote(sym, snap){
     if(window.AndroidBridge) return snap ? nativeSnapshot(sym) : nativeQuote(symToTicker(sym));
     return new Promise(function(resolve, reject){
-      var path = "/v8/finance/chart/" + encodeURIComponent(sym) + "?interval=1d&range=" + (snap ? "1mo" : "5d") + "&includePrePost=false&_=" + Date.now();
+      var path = yahooChartPath(sym, snap);
       var y1 = "https://query1.finance.yahoo.com" + path;
       var y2 = "https://query2.finance.yahoo.com" + path;
+      /* Also try classic range=1mo as a second wave if period1 path is slow/blocked */
+      var pathMo = "/v8/finance/chart/" + encodeURIComponent(sym) + "?interval=1d&range=1mo&includePrePost=false&_=" + Date.now();
+      var y1mo = "https://query1.finance.yahoo.com" + pathMo;
       var enc = encodeURIComponent(y1);
+      var encMo = encodeURIComponent(y1mo);
       var srcs = [
         { u: y1, d: 0 },
         { u: y2, d: 0 },
-        { u: "https://corsproxy.io/?url=" + enc, d: 400 },
-        { u: "https://api.allorigins.win/raw?url=" + enc, d: 600 },
-        { u: "https://api.codetabs.com/v1/proxy?quest=" + enc, d: 900 },
-        { u: "https://cors.dev/?" + y1, d: 1100 }
+        { u: "https://corsproxy.io/?url=" + enc, d: 350 },
+        { u: "https://api.allorigins.win/raw?url=" + enc, d: 550 },
+        { u: y1mo, d: 800 },
+        { u: "https://corsproxy.io/?url=" + encMo, d: 1000 },
+        { u: "https://api.codetabs.com/v1/proxy?quest=" + enc, d: 1200 },
+        { u: "https://cors.dev/?" + y1, d: 1400 }
       ];
       var done = false, pending = srcs.length, kinds = [], ctrls = [], timers = [];
+      var bestSnap = null;
+      function scoreSnap(s){
+        if(!s || !(s.price > 0)) return -1;
+        return (s.days && s.days.length ? s.days.length * 10 : 0) + (s.monthHigh > 0 ? 5 : 0);
+      }
       function finish(fn, v){
         if(done) return; done = true;
         timers.forEach(clearTimeout);
@@ -1819,13 +1878,27 @@ function doGet(e) {
       function fail(e){
         kinds.push(errKind(e));
         pending--;
-        if(pending === 0) finish(reject, new Error(kinds.indexOf("blocked") >= 0 && kinds.every(function(k){ return k === "blocked" || k === "timeout"; }) ? "blocked" : kinds.join(", ")));
+        if(pending === 0){
+          if(bestSnap) finish(resolve, bestSnap);
+          else finish(reject, new Error(kinds.indexOf("blocked") >= 0 && kinds.every(function(k){ return k === "blocked" || k === "timeout"; }) ? "blocked" : kinds.join(", ")));
+        }
+      }
+      function accept(parsed){
+        if(done) return;
+        if(!snap){ finish(resolve, parsed); return; }
+        /* Prefer the response with the most in-month daily highs (true MTD), not just today's day high */
+        if(!bestSnap || scoreSnap(parsed) > scoreSnap(bestSnap)) bestSnap = parsed;
+        if(scoreSnap(parsed) >= 15) finish(resolve, bestSnap); /* enough history — take it */
+        else {
+          pending--;
+          if(pending === 0) finish(resolve, bestSnap);
+        }
       }
       srcs.forEach(function(sc){
         timers.push(setTimeout(function(){
           if(done) return;
           var ctrl = new AbortController(); ctrls.push(ctrl);
-          timers.push(setTimeout(function(){ ctrl.abort(); }, 7000));
+          timers.push(setTimeout(function(){ ctrl.abort(); }, 8000));
           fetch(sc.u, {
             signal: ctrl.signal,
             cache: "no-store",
@@ -1833,11 +1906,11 @@ function doGet(e) {
           })
             .then(function(r){ if(!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
             .then(function(j){
-              /* allorigins /raw returns body; some proxies wrap — unwrap if needed */
               if(j && j.contents && typeof j.contents === "string"){
                 try{ j = JSON.parse(j.contents); }catch(e){}
               }
-              finish(resolve, snap ? snapshotFromJson(j) : quoteFromJson(j));
+              var parsed = snap ? snapshotFromJson(j) : quoteFromJson(j);
+              if(snap) accept(parsed); else finish(resolve, parsed);
             })
             .catch(function(e){ if(!done) fail(e); });
         }, sc.d));
@@ -1923,7 +1996,7 @@ function doGet(e) {
         r.fund.currentPrice = Math.round(r.q.price * 100) / 100;
         r.fund.currentPriceAt = Number(r.q.time || Date.now());
         ok++; if(r.q.time > latest) latest = r.q.time;
-        if(!(r.q.days && r.q.days.length && mergeMonthHighs(r.fund.id, r.q.days))) noHigh.push(r.fund.name);
+        if(!mergeMonthHighs(r.fund.id, r.q.days, r.q.monthHigh)) noHigh.push(r.fund.name);
       } else { failed.push(r.fund.name); if(!reason) reason = r.err; }
     });
     if(ok > 0){
@@ -1985,7 +2058,7 @@ function doGet(e) {
     }
     fund.currentPrice = Math.round(q.price * 100) / 100;
     fund.currentPriceAt = Number(q.time || Date.now());
-    if(q.days && q.days.length) gotHigh = mergeMonthHighs(fund.id, q.days);
+    gotHigh = mergeMonthHighs(fund.id, q.days, q.monthHigh);
     await saveFunds();
     await observeFundPrices();
     await saveFundPriceHistory();
@@ -2720,7 +2793,7 @@ function doGet(e) {
     document.getElementById("resetConfirmBtn").addEventListener("click", async function(){
       state.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
       state.funds = JSON.parse(JSON.stringify(DEFAULT_FUNDS));
-      state.niftyLog = []; state.reserves = {regular:0,dip:0}; state.contributions = []; state.transactions = []; state.meta = { lastRolloverMonth: monthKey(todayISO()), lastRollover: null, pricesAt: null, pricesMarketTime: null, highSrc: {}, manualHigh: {}, alertNotified: {} };
+      state.niftyLog = []; state.reserves = {regular:0,dip:0}; state.contributions = []; state.transactions = []; state.meta = { lastRolloverMonth: monthKey(todayISO()), lastRollover: null, pricesAt: null, pricesMarketTime: null, highSrc: {}, manualHigh: {}, marketMonthHigh: {}, alertNotified: {} };
       await saveMeta();
       await saveSettings(); await saveFunds(); await saveNifty(); await saveReserves(); await saveContrib(); await saveTxn();
       overlay.remove();
@@ -2827,6 +2900,7 @@ function doGet(e) {
         if(state.fundDipTriggered[f.id] === curMonth) delete state.fundDipTriggered[f.id];
         if(state.meta.manualHigh) delete state.meta.manualHigh[f.id];
         if(state.meta.highSrc) delete state.meta.highSrc[f.id];
+        if(state.meta.marketMonthHigh) delete state.meta.marketMonthHigh[f.id];
         if(state.meta.alertNotified) delete state.meta.alertNotified[f.id];
       });
       await saveMeta();

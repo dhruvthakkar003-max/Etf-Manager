@@ -1,4 +1,4 @@
-const CACHE_NAME = "etf-tracker-ai-v11";
+const CACHE_NAME = "etf-tracker-ai-v12";
 const CORE_ASSETS = [
   "./index.html",
   "./manifest.json",
