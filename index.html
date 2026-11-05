@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="ETF Tracker" />
 <meta name="application-name" content="ETF Tracker" />
 <meta name="format-detection" content="telephone=no" />
-<link rel="manifest" href="manifest.json?v=etf10" />
+<link rel="manifest" href="manifest.json?v=etf11" />
 <link rel="icon" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
@@ -179,9 +179,9 @@
     display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom,0px)) 4px;z-index:30;
   }
   nav.bottom-nav button{
-    background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;
-    font-size:10.5px;color:var(--ink-faint);cursor:pointer;padding:6px 10px;min-width:56px;min-height:48px;
-    font-family:'Inter',sans-serif;font-weight:600;justify-content:center;
+    background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;
+    font-size:9.5px;color:var(--ink-faint);cursor:pointer;padding:6px 4px;min-width:48px;min-height:48px;
+    font-family:'Inter',sans-serif;font-weight:600;justify-content:center;flex:1;
   }
   nav.bottom-nav button .nav-icon{font-size:20px;line-height:1;}
   nav.bottom-nav button.active{color:var(--gold);}
@@ -226,6 +226,33 @@
   .ai-stat small{display:block;color:var(--ink-faint);font-size:10px;text-transform:uppercase;letter-spacing:.04em;}
   .ai-stat strong{display:block;font-family:'IBM Plex Mono',monospace;font-size:14px;margin-top:4px;}
   .footer-note{text-align:center;font-size:10.5px;color:var(--ink-faint);margin-top:8px;line-height:1.6;}
+
+  /* Performance & Plan */
+  .perf-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .perf-grid.three{grid-template-columns:1fr 1fr 1fr;}
+  .perf-card{background:#FCFBF8;border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;}
+  .perf-card small{display:block;font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;}
+  .perf-card strong{display:block;font-family:'IBM Plex Mono',monospace;font-size:15px;margin-top:4px;}
+  .perf-card .sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .gap-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13px;gap:8px;}
+  .gap-row:last-child{border-bottom:none;}
+  .gap-name{font-weight:600;flex:1;min-width:0;}
+  .gap-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right;white-space:nowrap;}
+  .gap-bar{height:4px;background:var(--border-soft);border-radius:2px;margin-top:4px;overflow:hidden;}
+  .gap-bar > i{display:block;height:100%;border-radius:2px;}
+  .priority-tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--alert-bg);color:var(--alert);}
+  .priority-tag.ok{background:var(--income-bg);color:var(--income);}
+  .priority-tag.warn{background:var(--gold-soft);color:#7a5a12;}
+  .plan-split-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13px;}
+  .plan-split-row .amt{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  .score-pill{display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;}
+  .score-pill.high{background:var(--income-bg);color:var(--income);}
+  .score-pill.mid{background:var(--gold-soft);color:#7a5a12;}
+  .score-pill.low{background:var(--expense-bg);color:var(--expense);}
+  .warn-banner{background:var(--alert-bg);border:1px solid #E9B58E;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;line-height:1.45;}
+  .ok-banner{background:var(--income-bg);border:1px solid #B8D4C2;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;line-height:1.45;}
+  .ret-pos{color:var(--income);}
+  .ret-neg{color:var(--expense);}
 </style>
 </head>
 <body>
@@ -308,6 +335,13 @@
   <!-- PORTFOLIO TAB -->
   <section class="tab-panel" id="tab-portfolio">
     <div class="card">
+      <div class="section-title">Performance overview</div>
+      <div id="perfOverview" class="perf-grid"></div>
+      <div id="perfPeriodReturns" class="perf-grid three" style="margin-top:4px;"></div>
+      <div id="perfBestWorst" style="margin-top:8px;"></div>
+      <div id="perfWarnings"></div>
+    </div>
+    <div class="card">
       <div class="section-title">Fund-wise investment &amp; returns</div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
         <button class="btn btn-ghost btn-sm" id="refreshPricesBtn">↻ Refresh prices</button>
@@ -316,8 +350,50 @@
       <div style="overflow-x:auto;"><table class="fund-table" id="fundTable"></table></div>
     </div>
     <div class="card">
+      <div class="section-title">Allocation vs target</div>
+      <div id="allocationDrift"></div>
+    </div>
+    <div class="card">
       <div class="section-title">Current value allocation</div>
       <div id="allocationContent"></div>
+    </div>
+  </section>
+
+  <!-- PLAN TAB -->
+  <section class="tab-panel" id="tab-plan">
+    <div class="card">
+      <div class="section-title">Next investment planner</div>
+      <div class="section-sub">Enter an amount to invest. Split prefers underweight funds and active dip alerts.</div>
+      <div class="form-row">
+        <div class="form-field"><label for="planAmount">Amount to deploy (₹)</label><input type="number" id="planAmount" class="mono-input" min="0" step="500" value="10000" /></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="planInvestBtn">Build plan</button>
+        <button class="btn btn-ghost" id="planWhatIfBtn">What-if on portfolio</button>
+      </div>
+      <div id="planResult" style="margin-top:12px;"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Priority list (underweight + dip)</div>
+      <div id="priorityList"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Dip readiness &amp; reserves</div>
+      <div id="dipReadiness"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Goal tracker</div>
+      <div id="goalTracker"></div>
+      <div class="form-row" style="margin-top:10px;">
+        <div class="form-field"><label for="goalCorpus">Target corpus (₹)</label><input type="number" id="goalCorpus" class="mono-input" min="0" step="10000" /></div>
+        <div class="form-field"><label for="goalMonths">Months to goal</label><input type="number" id="goalMonths" class="mono-input" min="1" max="600" step="1" /></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="saveGoalBtn">Save goal</button>
+      <div id="goalProjection" class="section-sub" style="margin-top:8px;"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Deploy checklist</div>
+      <div id="deployChecklist"></div>
     </div>
   </section>
 
@@ -440,8 +516,9 @@
 <nav class="bottom-nav">
   <button class="nav-btn active" data-tab="trigger"><span class="nav-icon">◎</span>Trigger</button>
   <button class="nav-btn" data-tab="portfolio"><span class="nav-icon">▤</span>Portfolio</button>
-  <button class="nav-btn" data-tab="ai"><span class="nav-icon">✦</span>AI Insights</button>
+  <button class="nav-btn" data-tab="plan"><span class="nav-icon">▸</span>Plan</button>
   <button class="nav-btn" data-tab="history"><span class="nav-icon">≡</span>History</button>
+  <button class="nav-btn" data-tab="ai"><span class="nav-icon">✦</span>AI</button>
   <button class="nav-btn" data-tab="settings"><span class="nav-icon">⚙</span>Settings</button>
 </nav>
 
@@ -535,7 +612,9 @@ function doGet(e) {
     trigger1Pct: 2.5,
     trigger2Pct: 5.0,
     trigger1DeployPct: 50,
-    trigger2DeployPct: 100
+    trigger2DeployPct: 100,
+    goalCorpus: 0,
+    goalMonths: 60
   };
   var DEFAULT_FUNDS = [
     { id: "f1", name: "MOVALUE", ticker: "NSE:MOVALUE", weight: 30, currentPrice: 0 },
@@ -807,6 +886,186 @@ function doGet(e) {
     return { invested: invested, units: units };
   }
 
+  /* ---------------- performance & planning helpers ---------------- */
+  function portfolioMetrics(){
+    var totalInvested = 0, totalValue = 0, rows = [];
+    state.funds.forEach(function(f){
+      var t = fundTotals(f.id);
+      var price = Number(f.currentPrice) || 0;
+      var value = t.units * price;
+      var target = Number(f.weight) || 0;
+      totalInvested += t.invested;
+      totalValue += value;
+      rows.push({
+        fund: f, invested: t.invested, units: t.units, price: price, value: value,
+        target: target, profit: value - t.invested,
+        retPct: t.invested > 0 ? (value - t.invested) / t.invested * 100 : 0,
+        monthHigh: fundHigh(f), monthDd: fundDrawdown(f)
+      });
+    });
+    rows.forEach(function(r){
+      r.curWt = totalValue > 0 ? r.value / totalValue * 100 : 0;
+      r.gapPct = r.curWt - r.target;
+      r.gapInr = totalValue > 0 ? (r.target / 100) * totalValue - r.value : 0;
+    });
+    var cash = (Number(state.reserves.regular) || 0) + (Number(state.reserves.dip) || 0);
+    var gross = totalValue + cash;
+    return {
+      rows: rows,
+      totalInvested: totalInvested,
+      totalValue: totalValue,
+      profit: totalValue - totalInvested,
+      retPct: totalInvested > 0 ? (totalValue - totalInvested) / totalInvested * 100 : 0,
+      cash: cash,
+      cashPct: gross > 0 ? cash / gross * 100 : 0,
+      gross: gross
+    };
+  }
+  function priceOnOrBefore(fundId, isoDate){
+    var arr = state.fundPriceHistory[fundId] || [];
+    var best = 0;
+    for(var i = 0; i < arr.length; i++){
+      if(arr[i] && arr[i].date && arr[i].date <= isoDate && Number(arr[i].price) > 0){
+        if(arr[i].date >= (best && best.date) || !best) best = arr[i];
+      }
+    }
+    return best ? Number(best.price) : 0;
+  }
+  function daysAgoISO(n){
+    var d = new Date();
+    d.setDate(d.getDate() - n);
+    return istDateISO(d.getTime());
+  }
+  function periodReturnForFund(fund, days){
+    var tot = fundTotals(fund.id);
+    if(!(tot.units > 0)) return null;
+    var cur = Number(fund.currentPrice) || 0;
+    if(!(cur > 0)) return null;
+    var past = priceOnOrBefore(fund.id, daysAgoISO(days));
+    if(!(past > 0)) return null;
+    return (cur - past) / past * 100;
+  }
+  function portfolioPeriodReturn(days){
+    var startVal = 0, endVal = 0, any = false;
+    state.funds.forEach(function(f){
+      var tot = fundTotals(f.id);
+      if(!(tot.units > 0)) return;
+      var cur = Number(f.currentPrice) || 0;
+      var past = priceOnOrBefore(f.id, daysAgoISO(days));
+      if(cur > 0 && past > 0){
+        startVal += tot.units * past;
+        endVal += tot.units * cur;
+        any = true;
+      }
+    });
+    if(!any || !(startVal > 0)) return null;
+    return (endVal - startVal) / startVal * 100;
+  }
+  /* XIRR (Newton) on cashflows: -invested on txn dates, +current value today */
+  function xirr(cashflows){
+    if(!cashflows || cashflows.length < 2) return null;
+    var sorted = cashflows.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var d0 = new Date(sorted[0].date + "T00:00:00");
+    function npv(r){
+      var s = 0;
+      sorted.forEach(function(cf){
+        var days = (new Date(cf.date + "T00:00:00") - d0) / 86400000;
+        s += cf.amount / Math.pow(1 + r, days / 365);
+      });
+      return s;
+    }
+    function dnpv(r){
+      var s = 0;
+      sorted.forEach(function(cf){
+        var days = (new Date(cf.date + "T00:00:00") - d0) / 86400000;
+        var t = days / 365;
+        if(t === 0) return;
+        s -= t * cf.amount / Math.pow(1 + r, t + 1);
+      });
+      return s;
+    }
+    var r = 0.1;
+    for(var i = 0; i < 40; i++){
+      var y = npv(r), dy = dnpv(r);
+      if(Math.abs(dy) < 1e-12) break;
+      var nr = r - y / dy;
+      if(!isFinite(nr) || nr <= -0.9999) nr = r / 2;
+      if(Math.abs(nr - r) < 1e-7){ r = nr; break; }
+      r = nr;
+    }
+    return isFinite(r) ? r * 100 : null;
+  }
+  function portfolioXirr(){
+    var flows = [];
+    state.transactions.forEach(function(t){
+      if(t.amount > 0 && t.date) flows.push({ date: t.date, amount: -Number(t.amount) });
+    });
+    var m = portfolioMetrics();
+    if(m.totalValue > 0) flows.push({ date: todayISO(), amount: m.totalValue });
+    if(flows.length < 2) return null;
+    return xirr(flows);
+  }
+  function fundXirr(fundId){
+    var flows = [];
+    state.transactions.forEach(function(t){
+      if(t.fundId === fundId && t.amount > 0 && t.date) flows.push({ date: t.date, amount: -Number(t.amount) });
+    });
+    var tot = fundTotals(fundId);
+    var fund = state.funds.find(function(f){ return f.id === fundId; });
+    var val = tot.units * (Number(fund && fund.currentPrice) || 0);
+    if(val > 0) flows.push({ date: todayISO(), amount: val });
+    if(flows.length < 2) return null;
+    return xirr(flows);
+  }
+  function allTimeHigh(fund){
+    var arr = state.fundPriceHistory[fund.id] || [];
+    var h = 0;
+    arr.forEach(function(x){ if(x && Number(x.price) > h) h = Number(x.price); });
+    var cur = Number(fund.currentPrice) || 0;
+    return Math.max(h, cur, fundHigh(fund));
+  }
+  function buildInvestmentPlan(amount){
+    amount = Number(amount) || 0;
+    if(!(amount > 0)) return { splits: [], note: "Enter an amount greater than 0." };
+    var m = portfolioMetrics();
+    var alerts = fundDipAlerts().filter(function(a){ return a.active; });
+    var alertIds = {};
+    alerts.forEach(function(a){ alertIds[a.fund.id] = true; });
+    /* Score: underweight gap (positive gapInr means underweight) + dip bonus */
+    var candidates = m.rows.map(function(r){
+      var under = Math.max(0, -r.gapPct); /* how many pts under target */
+      var dipBonus = alertIds[r.fund.id] ? 15 : 0;
+      var score = under * 3 + dipBonus + (r.target > 0 ? 1 : 0);
+      return { row: r, score: score, under: under, onDip: !!alertIds[r.fund.id] };
+    }).filter(function(c){ return c.row.target > 0 || c.onDip; });
+    candidates.sort(function(a,b){ return b.score - a.score; });
+    if(!candidates.length){
+      /* fall back to target weights */
+      candidates = m.rows.filter(function(r){ return r.target > 0; }).map(function(r){
+        return { row: r, score: r.target, under: 0, onDip: false };
+      });
+    }
+    var totalScore = candidates.reduce(function(a,c){ return a + Math.max(c.score, 0.01); }, 0);
+    var splits = candidates.map(function(c){
+      var pct = totalScore > 0 ? Math.max(c.score, 0.01) / totalScore : 0;
+      var amt = Math.round(amount * pct);
+      return {
+        fund: c.row.fund,
+        amount: amt,
+        pct: pct * 100,
+        onDip: c.onDip,
+        underweight: c.under > 0.5,
+        target: c.row.target,
+        curWt: c.row.curWt,
+        gapPct: c.row.gapPct
+      };
+    }).filter(function(s){ return s.amount > 0; });
+    /* Fix rounding to exact amount */
+    var sum = splits.reduce(function(a,s){ return a + s.amount; }, 0);
+    if(splits.length && sum !== amount) splits[0].amount += (amount - sum);
+    return { splits: splits, note: alerts.length ? (alerts.length + " fund(s) on dip alert — prioritized.") : "Split by underweight vs target." };
+  }
+
   /* ---------------- tab navigation ---------------- */
   function showTab(tab){
     state.activeTab = tab;
@@ -822,6 +1081,7 @@ function doGet(e) {
   function renderActiveTab(){
     if(state.activeTab === "trigger") renderTrigger();
     else if(state.activeTab === "portfolio") renderPortfolio();
+    else if(state.activeTab === "plan") renderPlan();
     else if(state.activeTab === "history") renderHistory();
     else if(state.activeTab === "settings") renderSettings();
     else if(state.activeTab === "ai") renderAIQuickStats();
@@ -1889,7 +2149,203 @@ function doGet(e) {
     var rb = document.getElementById("refreshPricesBtn");
     if(rb){ rb.disabled = pricesBusy; rb.textContent = pricesBusy ? "Fetching…" : "↻ Refresh prices"; }
 
+    renderPerfOverview();
+    renderAllocationDrift();
     renderAllocation(totalValue);
+  }
+
+  function renderPerfOverview(){
+    var m = portfolioMetrics();
+    var x = portfolioXirr();
+    var el = document.getElementById("perfOverview");
+    if(!el) return;
+    el.innerHTML =
+      '<div class="perf-card"><small>Portfolio value</small><strong>'+fmtMoney(m.totalValue)+'</strong><div class="sub">Invested '+fmtMoney(m.totalInvested)+'</div></div>' +
+      '<div class="perf-card"><small>Unrealized P/L</small><strong class="'+(m.profit>=0?'ret-pos':'ret-neg')+'">'+fmtMoney(m.profit)+'</strong><div class="sub">'+fmtPct(m.retPct)+' simple</div></div>' +
+      '<div class="perf-card"><small>XIRR (approx)</small><strong class="'+(x!=null&&x>=0?'ret-pos':(x!=null?'ret-neg':''))+'">'+(x!=null?fmtNum(x,1)+'%':'—')+'</strong><div class="sub">Needs txns + prices</div></div>' +
+      '<div class="perf-card"><small>Cash drag</small><strong>'+fmtMoney(m.cash)+'</strong><div class="sub">'+fmtNum(m.cashPct,1)+'% of portfolio+cash</div></div>';
+
+    var pr = document.getElementById("perfPeriodReturns");
+    if(pr){
+      var p1 = portfolioPeriodReturn(30), p3 = portfolioPeriodReturn(90), p6 = portfolioPeriodReturn(180);
+      var py = portfolioPeriodReturn(365);
+      function cell(label, v){
+        if(v == null) return '<div class="perf-card"><small>'+label+'</small><strong>—</strong><div class="sub">Need price history</div></div>';
+        return '<div class="perf-card"><small>'+label+'</small><strong class="'+(v>=0?'ret-pos':'ret-neg')+'">'+fmtNum(v,1)+'%</strong></div>';
+      }
+      var ytdDays = Math.max(1, Math.round((Date.now() - new Date(new Date().getFullYear(),0,1).getTime())/86400000));
+      var ytd = portfolioPeriodReturn(ytdDays);
+      pr.innerHTML = cell("1M", p1) + cell("3M", p3) + cell("6M", p6) + cell("YTD", ytd);
+    }
+
+    var bw = document.getElementById("perfBestWorst");
+    if(bw){
+      var ranked = m.rows.filter(function(r){ return r.invested > 0; }).slice().sort(function(a,b){ return b.retPct - a.retPct; });
+      if(!ranked.length){ bw.innerHTML = ''; return; }
+      var best = ranked[0], worst = ranked[ranked.length-1];
+      bw.innerHTML = '<div class="gap-row"><span class="gap-name">Best: <b>'+escapeHtml(best.fund.name)+'</b></span><span class="gap-meta ret-pos">'+fmtPct(best.retPct)+'</span></div>' +
+        '<div class="gap-row"><span class="gap-name">Worst: <b>'+escapeHtml(worst.fund.name)+'</b></span><span class="gap-meta ret-neg">'+fmtPct(worst.retPct)+'</span></div>';
+    }
+
+    var warn = document.getElementById("perfWarnings");
+    if(warn){
+      var msgs = [];
+      var maxRow = m.rows.slice().sort(function(a,b){ return b.curWt - a.curWt; })[0];
+      if(maxRow && maxRow.curWt >= 40) msgs.push('<div class="warn-banner">Concentration: <b>'+escapeHtml(maxRow.fund.name)+'</b> is '+fmtNum(maxRow.curWt,0)+'% of portfolio (over 40%).</div>');
+      if(m.cashPct >= 25 && m.gross > 0) msgs.push('<div class="warn-banner">Cash drag is high ('+fmtNum(m.cashPct,0)+'%). Consider deploying Regular/Dip reserves when triggers allow.</div>');
+      var deep = m.rows.filter(function(r){
+        var ath = allTimeHigh(r.fund);
+        return ath > 0 && r.price > 0 && (ath - r.price)/ath * 100 >= 15;
+      });
+      if(deep.length) msgs.push('<div class="ok-banner">'+deep.length+' fund(s) ≥15% below all-time observed high — possible longer-term dip opportunity.</div>');
+      if(!msgs.length && m.totalValue > 0){
+        var maxGap = Math.max.apply(null, m.rows.map(function(r){ return Math.abs(r.gapPct); }).concat([0]));
+        if(maxGap < 3) msgs.push('<div class="ok-banner">Allocation is close to target (max drift '+fmtNum(maxGap,1)+' pts). No urgent rebalance needed.</div>');
+      }
+      warn.innerHTML = msgs.join("");
+    }
+  }
+
+  function renderAllocationDrift(){
+    var el = document.getElementById("allocationDrift");
+    if(!el) return;
+    var m = portfolioMetrics();
+    if(!m.rows.length){ el.innerHTML = '<div class="empty-note">Add funds and prices to see allocation drift.</div>'; return; }
+    var html = m.rows.slice().sort(function(a,b){ return a.gapPct - b.gapPct; }).map(function(r){
+      var status = r.gapPct < -2 ? '<span class="priority-tag">Underweight</span>' : (r.gapPct > 2 ? '<span class="priority-tag warn">Overweight</span>' : '<span class="priority-tag ok">On target</span>');
+      var gapTxt = (r.gapInr >= 0 ? "+" : "") + fmtMoney(r.gapInr);
+      var barPct = Math.min(100, Math.max(0, r.curWt));
+      var col = r.gapPct < -2 ? "var(--alert)" : (r.gapPct > 2 ? "var(--gold)" : "var(--income)");
+      return '<div class="gap-row" style="flex-wrap:wrap;">' +
+        '<span class="gap-name">'+escapeHtml(r.fund.name)+' '+status+'</span>' +
+        '<span class="gap-meta">'+fmtNum(r.curWt,1)+'% vs '+fmtNum(r.target,0)+'% · gap '+gapTxt+'</span>' +
+        '<div style="flex-basis:100%;"><div class="gap-bar"><i style="width:'+barPct+'%;background:'+col+'"></i></div></div></div>';
+    }).join("");
+    el.innerHTML = html;
+  }
+
+  function renderPlan(){
+    var m = portfolioMetrics();
+    /* Priority list */
+    var pl = document.getElementById("priorityList");
+    if(pl){
+      var alerts = fundDipAlerts().filter(function(a){ return a.active; });
+      var alertIds = {}; alerts.forEach(function(a){ alertIds[a.fund.id] = true; });
+      var ordered = m.rows.slice().sort(function(a,b){
+        var ad = alertIds[a.fund.id] ? 1 : 0, bd = alertIds[b.fund.id] ? 1 : 0;
+        if(ad !== bd) return bd - ad;
+        return a.gapPct - b.gapPct; /* more underweight first */
+      });
+      if(!ordered.length) pl.innerHTML = '<div class="empty-note">No funds yet.</div>';
+      else pl.innerHTML = ordered.map(function(r, i){
+        var tags = [];
+        if(alertIds[r.fund.id]) tags.push('<span class="priority-tag">DIP</span>');
+        if(r.gapPct < -2) tags.push('<span class="priority-tag">Underweight</span>');
+        else if(r.gapPct > 2) tags.push('<span class="priority-tag warn">Overweight</span>');
+        return '<div class="gap-row"><span class="gap-name">'+(i+1)+'. '+escapeHtml(r.fund.name)+' '+tags.join(" ")+'</span>' +
+          '<span class="gap-meta">'+fmtNum(r.curWt,1)+'% / '+fmtNum(r.target,0)+'%</span></div>';
+      }).join("");
+    }
+
+    /* Dip readiness */
+    var dr = document.getElementById("dipReadiness");
+    if(dr){
+      var dip = Number(state.reserves.dip) || 0;
+      var reg = Number(state.reserves.regular) || 0;
+      var monthly = Number(state.settings.monthlyContribution) || 0;
+      var score = dip >= monthly * 2 ? "high" : (dip >= monthly * 0.5 ? "mid" : "low");
+      var label = score === "high" ? "Strong" : (score === "mid" ? "Moderate" : "Low");
+      var activeDips = fundDipAlerts().filter(function(a){ return a.active; }).length;
+      dr.innerHTML =
+        '<div class="perf-grid">' +
+        '<div class="perf-card"><small>Dip reserve</small><strong>'+fmtMoney(dip)+'</strong></div>' +
+        '<div class="perf-card"><small>Regular reserve</small><strong>'+fmtMoney(reg)+'</strong></div>' +
+        '<div class="perf-card"><small>Readiness</small><strong><span class="score-pill '+score+'">'+label+'</span></strong><div class="sub">vs monthly ₹'+fmtNum(monthly,0)+'</div></div>' +
+        '<div class="perf-card"><small>Active dip alerts</small><strong>'+activeDips+'</strong></div></div>' +
+        (activeDips && dip > 0 ? '<div class="ok-banner">Dip alerts active and reserve available — consider deploying from Dip Reserve.</div>' :
+          (!activeDips ? '<div class="section-sub">No fund dip alerts right now. Keep contributing to Regular Reserve.</div>' : '<div class="warn-banner">Alerts active but Dip Reserve is empty — log contributions or wait for rollover.</div>'));
+    }
+
+    /* Goal tracker */
+    var gt = document.getElementById("goalTracker");
+    var goalCorpus = Number(state.settings.goalCorpus) || 0;
+    var goalMonths = Number(state.settings.goalMonths) || 60;
+    var gc = document.getElementById("goalCorpus");
+    var gm = document.getElementById("goalMonths");
+    if(gc) gc.value = goalCorpus || "";
+    if(gm) gm.value = goalMonths || "";
+    if(gt){
+      if(goalCorpus > 0){
+        var progress = m.totalValue / goalCorpus * 100;
+        var left = Math.max(0, goalCorpus - m.totalValue);
+        gt.innerHTML = '<div class="perf-grid"><div class="perf-card"><small>Target</small><strong>'+fmtMoney(goalCorpus)+'</strong></div>' +
+          '<div class="perf-card"><small>Progress</small><strong>'+fmtNum(Math.min(100,progress),1)+'%</strong><div class="sub">'+fmtMoney(m.totalValue)+' now</div></div></div>' +
+          '<div class="gap-bar" style="height:8px;margin:8px 0;"><i style="width:'+Math.min(100,progress)+'%;background:var(--gold)"></i></div>' +
+          '<div class="section-sub">Still need about '+fmtMoney(left)+' to reach goal.</div>';
+      } else {
+        gt.innerHTML = '<div class="section-sub">Set a target corpus below to track progress.</div>';
+      }
+    }
+    var gp = document.getElementById("goalProjection");
+    if(gp && goalCorpus > 0 && goalMonths > 0){
+      var monthly = Number(state.settings.monthlyContribution) || 0;
+      var need = Math.max(0, goalCorpus - m.totalValue);
+      var perMonth = need / goalMonths;
+      var note = monthly >= perMonth
+        ? 'At ₹'+fmtNum(monthly,0)+'/mo you are on track (need ~₹'+fmtNum(perMonth,0)+'/mo assuming no growth).'
+        : 'Need ~₹'+fmtNum(perMonth,0)+'/mo to hit target in '+goalMonths+' months (current SIP ₹'+fmtNum(monthly,0)+'). Growth would reduce the required amount.';
+      gp.textContent = note;
+    } else if(gp) gp.textContent = "";
+
+    /* Deploy checklist */
+    var dc = document.getElementById("deployChecklist");
+    if(dc){
+      var ts = triggerStatus();
+      var items = [];
+      items.push((m.cash > 0 ? "✓" : "○") + " Reserves available: "+fmtMoney(m.cash));
+      items.push((ts.level > 0 ? "✓" : "○") + " Nifty trigger: "+ts.label);
+      var act = fundDipAlerts().filter(function(a){ return a.active; }).length;
+      items.push((act > 0 ? "✓" : "○") + " Fund dip alerts: "+act+" active");
+      var under = m.rows.filter(function(r){ return r.gapPct < -2; }).length;
+      items.push((under > 0 ? "✓" : "○") + " Underweight funds: "+under);
+      var action = (ts.level > 0 || act > 0)
+        ? '<div class="ok-banner" style="margin-top:8px;">Actionable: deploy from reserves into priority funds (see planner above).</div>'
+        : '<div class="section-sub" style="margin-top:8px;">No trigger — continue SIPs into underweight funds or wait for a dip.</div>';
+      dc.innerHTML = items.map(function(t){ return '<div class="gap-row"><span class="gap-name">'+t+'</span></div>'; }).join("") + action;
+    }
+
+    /* Keep last plan result if amount set */
+  }
+
+  function runInvestmentPlan(){
+    var amt = parseFloat(document.getElementById("planAmount").value) || 0;
+    var plan = buildInvestmentPlan(amt);
+    var el = document.getElementById("planResult");
+    if(!el) return;
+    if(!plan.splits.length){ el.innerHTML = '<div class="empty-note">'+escapeHtml(plan.note)+'</div>'; return; }
+    var html = '<div class="section-sub" style="margin-bottom:8px;">'+escapeHtml(plan.note)+'</div>';
+    html += plan.splits.map(function(s){
+      var tags = (s.onDip ? '<span class="priority-tag">DIP</span> ' : '') + (s.underweight ? '<span class="priority-tag">Underweight</span>' : '');
+      return '<div class="plan-split-row"><span>'+escapeHtml(s.fund.name)+' '+tags+'<br><span style="font-size:11px;color:var(--ink-faint)">'+fmtNum(s.curWt,1)+'% → target '+fmtNum(s.target,0)+'%</span></span><span class="amt">'+fmtMoney(s.amount)+'<br><span style="font-size:11px;color:var(--ink-faint)">'+fmtNum(s.pct,0)+'%</span></span></div>';
+    }).join("");
+    var m = portfolioMetrics();
+    html += '<div class="section-sub" style="margin-top:10px;">After this deploy, open Portfolio to record transactions fund-wise.</div>';
+    el.innerHTML = html;
+  }
+
+  function runWhatIf(){
+    var amt = parseFloat(document.getElementById("planAmount").value) || 0;
+    var plan = buildInvestmentPlan(amt);
+    var m = portfolioMetrics();
+    var el = document.getElementById("planResult");
+    if(!el) return;
+    var newValue = m.totalValue + amt;
+    var lines = plan.splits.map(function(s){
+      var newFundVal = s.fund ? ((fundTotals(s.fund.id).units * (Number(s.fund.currentPrice)||0)) + s.amount) : s.amount;
+      var newWt = newValue > 0 ? newFundVal / newValue * 100 : 0;
+      return '<div class="plan-split-row"><span>'+escapeHtml(s.fund.name)+'</span><span class="amt">'+fmtNum(s.curWt,1)+'% → <b>'+fmtNum(newWt,1)+'%</b></span></div>';
+    }).join("");
+    el.innerHTML = '<div class="section-sub">If you invest '+fmtMoney(amt)+' as planned, portfolio value ≈ '+fmtMoney(newValue)+'. Estimated new weights:</div>' + lines;
   }
 
   function renderAllocation(totalValue){
@@ -2189,6 +2645,19 @@ function doGet(e) {
     await saveSettings();
     showToast("Settings saved.");
     renderTrigger();
+  });
+
+  var planInvestBtn = document.getElementById("planInvestBtn");
+  if(planInvestBtn) planInvestBtn.addEventListener("click", runInvestmentPlan);
+  var planWhatIfBtn = document.getElementById("planWhatIfBtn");
+  if(planWhatIfBtn) planWhatIfBtn.addEventListener("click", runWhatIf);
+  var saveGoalBtn = document.getElementById("saveGoalBtn");
+  if(saveGoalBtn) saveGoalBtn.addEventListener("click", async function(){
+    state.settings.goalCorpus = parseFloat(document.getElementById("goalCorpus").value) || 0;
+    state.settings.goalMonths = parseInt(document.getElementById("goalMonths").value, 10) || 60;
+    await saveSettings();
+    showToast("Goal saved.");
+    renderPlan();
   });
 
   function renderFundEditList(){
